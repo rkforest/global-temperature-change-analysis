@@ -9,6 +9,12 @@ The project is implemented in R as a reproducible Quarto book and is
 organized into three stages: data acquisition, data transformation, and
 data visualization.
 
+## 🌍 Live Project
+
+The complete Quarto book is available at:
+
+https://rkforest.github.io/global-temperature-change-analysis/
+
 ## Analysis
 
 The visualization chapter examines global temperature change from several
@@ -118,6 +124,19 @@ Major R packages include:
  - viridisLite
 Exact software and package versions used to render the project are
 documented in the Data Acquisition chapter.
+
+## Reproducible Environment
+
+This project uses **renv** to manage R package dependencies.
+
+After cloning the repository, restore the project environment with:
+
+```r
+install.packages("renv")
+renv::restore()
+```
+
+This installs the package versions recorded in `renv.lock`, ensuring that the analysis can be reproduced with the same software environment used during development.
 
 ## Reproducing the Analysis
 
