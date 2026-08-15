@@ -1,0 +1,34 @@
+project:
+  type: book
+  output-dir: "_output"  
+  resources: ".quarto/files"  # where figures and supporting files go
+
+book:
+  title: "Global Temperature Change Analysis"
+  author: "Rick Forest"
+  date: today
+
+  chapters:
+    - index.qmd
+    - 01-data-acquisition.qmd
+    - 02-data-transformation.qmd
+    - 03-data-visualization.qmd
+
+ 
+execute:
+  warning: false
+  message: false
+
+code-tools: true
+code-fold: show
+
+format:
+  html:
+    page-layout: full
+    toc: true
+    toc-location: right
+    grid:
+      sidebar-width: 250px
+      body-width: 900px
+      margin-width: 150px
+      gutter-width: 1.5rem

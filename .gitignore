@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Positron / VS Code
+.positron/
+.vscode/
+
+# R
+.Rhistory
+.RData
+.Ruserdata
+
+# RStudio
+.Rproj.user/
+
+# Quarto
+.quarto/
+_output/
+*_cache/
+*_files/
+
+# Project data
+data/

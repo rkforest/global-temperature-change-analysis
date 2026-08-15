@@ -1,0 +1,379 @@
+---
+title: "Data Acquisition"
+author: "Rick Forest"
+date: today
+format:
+  html:
+    toc: true
+    number-sections: false
+    code-fold: true
+    code-tools: true
+---
+
+Objective: Acquire data to process global temperature anomalies
+
+## Project Software Environment
+
+```{r}
+#| label: software-versions
+quarto_version <- system2("quarto", "--version", stdout = TRUE)[1]
+# Update manually when Positron is upgraded
+positron_version <- "2026.6.0"
+
+software_versions <- data.frame(
+  category = c(
+    "Platform", "Platform", "Platform",
+    "Package", "Package", "Package",
+    "Package", "Package", "Package",
+    "Package", "Package", "Package"
+  ),
+  software = c(
+    "R","Quarto","Positron",
+    "tidyverse","gt","R.utils",
+    "rnaturalearth","sf","ncdf4",
+    "patchwork","pals","viridisLite"
+  ),
+  version = c(
+    as.character(getRversion()),
+    quarto_version,
+    positron_version,
+    as.character(packageVersion("tidyverse")),
+    as.character(packageVersion("gt")),
+    as.character(packageVersion("R.utils")),
+    as.character(packageVersion("rnaturalearth")),
+    as.character(packageVersion("sf")),
+    as.character(packageVersion("ncdf4")),
+    as.character(packageVersion("patchwork")),
+    as.character(packageVersion("pals")),
+    as.character(packageVersion("viridisLite"))
+  ),
+  used_in = c(
+    "01–03","01–03","Development",
+    "01–03","01–03","01",
+    "01","01–03","02",
+    "03","03","03"
+  ),
+  stringsAsFactors = FALSE
+)
+```
+
+```{r}
+#| label: software-versions-table
+library(gt)
+software_versions |>
+  gt(
+    groupname_col = "category"
+  ) |>
+  cols_label(
+    software = "Software",
+    version = "Version",
+    used_in = "Used In"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = c(version, used_in)
+  ) |>
+  cols_width(
+    software ~ px(180),
+    version ~ px(120),
+    used_in ~ px(110)
+  ) |>
+  tab_header(
+    title = "Project Software Environment",
+    subtitle = "Platform software and R packages used in the workflow"
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_row_groups()
+  ) |>
+  tab_source_note(
+    source_note = md(
+      "**Used In:** 01 = Data Acquisition, 02 = Data Transformation, 03 = Data Visualization"
+    )
+  )
+```
+
+## Initialization
+
+### Libraries
+
+```{r}
+#| label: libraries
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(R.utils)
+  library(rnaturalearth)
+  library(sf)
+})
+```
+
+### Directories
+
+```{r}
+#| label: directories
+
+dir_raw <- file.path("data", "raw")
+dir.create(dir_raw, recursive = TRUE, showWarnings = FALSE)
+
+dir_transformed <- file.path("data", "transformed")
+dir.create(dir_transformed, recursive = TRUE, showWarnings = FALSE)
+
+dir_archive <- file.path("data", "archive")
+dir.create(dir_archive, recursive = TRUE, showWarnings = FALSE)
+
+```
+
+### URls
+
+```{r}
+#| label: URLs
+url_csv <- paste0("https://data.giss.nasa.gov/", "gistemp/tabledata_v4/")
+url_netcdf <- paste0("https://data.giss.nasa.gov/", "pub/gistemp/")
+```
+
+### Catalog
+
+```{r}
+#| label: catalog
+file_catalog <-
+  tibble(
+    dataset = c(
+      "Global Monthly Temperature",
+      "Northern Hemisphere Monthly Temperature",
+      "Southern Hemisphere Monthly Temperature",
+      "Latitude Zone Annual Temperature",
+      "Global Gridded Monthly Temperature"
+    ),
+    source = "NASA GISS",
+    format = c(
+      "CSV",
+      "CSV",
+      "CSV",
+      "CSV",
+      "NetCDF"
+    ),
+    filename = c(
+      "GLB.Ts+dSST.csv",
+      "NH.Ts+dSST.csv",
+      "SH.Ts+dSST.csv",
+      "ZonAnn.Ts+dSST.csv",
+      "gistemp1200_GHCNv4_ERSSTv5.nc"
+    ),
+    source_url = c(
+      url_csv,
+      url_csv,
+      url_csv,
+      url_csv,
+      url_netcdf
+    )
+  ) |>
+  mutate(
+    local_path = file.path(
+      dir_raw,
+      filename
+    )
+  )
+```
+
+## Download temperature anomalies
+
+### Download csv files
+
+```{r}
+#| label: download-csv
+
+for (i in seq_len(nrow(file_catalog))) {
+
+  if (file_catalog$format[[i]] == "CSV") {
+
+    filename <- file_catalog$filename[[i]]
+    source_url <- file_catalog$source_url[[i]]
+
+    download_path <- paste0(
+      source_url,
+      filename
+    )
+
+    latest_path <- file.path(
+      dir_raw,
+      filename
+    )
+
+    archive_path <- file.path(
+      dir_archive,
+      filename
+    )
+
+    download.file(
+      url = download_path,
+      destfile = latest_path,
+      mode = "wb",
+      quiet = TRUE
+    )
+
+    file.copy(
+      from = latest_path,
+      to = archive_path,
+      overwrite = TRUE
+    )
+
+    message(
+      "Updated: ",
+      filename
+    )
+  }
+}
+```
+
+### Download netCDF file
+
+```{r}
+#| label: download-netCDF
+
+for (i in seq_len(nrow(file_catalog))) {
+  if (file_catalog$format[[i]] == "NetCDF") {
+    filename <- file_catalog$filename[[i]]
+    source_url <- file_catalog$source_url[[i]]
+    download_path <- paste0(
+      source_url,
+      filename,
+      ".gz"
+    )
+    latest_path <- file.path(
+      dir_raw,
+      filename
+    )
+    archive_path <- file.path(
+      dir_archive,
+      paste0(
+        filename,
+        ".gz"
+      )
+    )
+    temporary_path <- paste0(
+      archive_path,
+      ".download"
+    )
+    download.file(
+      url = download_path,
+      destfile = temporary_path,
+      mode = "wb",
+      quiet = FALSE
+    )
+    file.rename(
+      from = temporary_path,
+      to = archive_path
+    )
+    R.utils::gunzip(
+      filename = archive_path,
+      destname = latest_path,
+      overwrite = TRUE,
+      remove = FALSE
+    )
+  }
+}
+```
+
+### Acquire coastline
+
+```{r}
+#| label: acquire-coastline
+path_coastline <- file.path(dir_raw,"global-coastline.gpkg")
+coastline_sf <- rnaturalearth::ne_download(
+  scale = 10,
+  type = "coastline",
+  category = "physical",
+  returnclass = "sf"
+)
+sf::st_write(
+  coastline_sf,
+  path_coastline,
+  layer = "coastline",
+  delete_dsn = TRUE,
+  quiet = TRUE
+)
+file_catalog <-
+  bind_rows(
+    file_catalog,
+    tibble(
+      dataset = "Global Coastline",
+      source = "Natural Earth",
+      format = "GeoPackage",
+      filename = basename(
+        path_coastline
+      ),
+      source_url =
+        "https://www.naturalearthdata.com/",
+      local_path = path_coastline
+    )
+  )
+```
+
+### Update catalog
+
+```{r}
+#| label: update-catalog
+file_catalog <-
+  file_catalog |>
+  mutate(
+    directory = dirname(
+      local_path
+    ),
+    acquisition_datetime = format(
+      file.info(local_path)$mtime,
+      "%Y-%m-%d %H:%M"
+    ),
+    file_size_kb = round(
+      file.info(local_path)$size / 1024,
+      0
+    )
+  )
+```
+
+## Acquisition summary
+
+```{r}
+#| label: acquisition-summary
+file_catalog |>
+  select(
+    dataset,
+    source,
+    filename,
+    format,
+    acquisition_datetime,
+    file_size_kb
+  ) |>
+  gt() |>
+  cols_label(
+    dataset = "Dataset",
+    source = "Source",
+    filename = "Filename",
+    format = "Format",
+    acquisition_datetime = "Acquired",
+    file_size_kb = "Size (KB)"
+  ) |>
+  fmt_number(
+    columns = file_size_kb,
+    decimals = 0
+  ) |>
+  cols_align(
+    align = "center",
+    columns = c(
+      source,
+      format,
+      acquisition_datetime,
+      file_size_kb
+    )
+  ) |>
+  cols_width(
+    dataset ~ px(240),
+    source ~ px(110),
+    format ~ px(90),
+    acquisition_datetime ~ px(130),
+    file_size_kb ~ px(90)
+  ) |>
+  tab_header(
+    title = "Project Data Catalog",
+    subtitle = "Data acquired for the analysis"
+  )
+```

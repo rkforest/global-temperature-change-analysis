@@ -1,0 +1,645 @@
+---
+title: "Data Transformation"
+author: "Rick Forest"
+date: today
+format:
+  html:
+    toc: true
+    number-sections: false
+    code-fold: true
+    code-tools: true
+---
+
+This step transforms the acquired temperature anomaly data.
+
+## Initialization
+
+### Libraries
+
+```{r}
+#| label: libraries
+suppressPackageStartupMessages({
+  library(tidyverse) # package collection used in transforming tabular data
+  library(ncdf4)     # process netCDF files
+  library(gt)        # package used to create and display formatted tables
+  library(sf)        # package used in transforming spatial data
+})
+```
+
+### Directories
+
+```{r}
+#| label: directories
+dir_raw <- file.path("data", "raw")
+dir_transformed <- file.path("data", "transformed")
+```
+
+### Paths
+
+```{r}
+#| label: paths
+file_name_nc = "gistemp1200_GHCNv4_ERSSTv5.nc"
+netCDF_path <- file.path(dir_raw, file_name_nc)
+```
+
+### Climate Periods
+
+```{r}
+#| label: R-climate-periods
+source("R/climate-periods.R")
+```
+
+### Analysis Start Year
+
+```{r}
+#| label: analysis-start-year
+analysis_start_year <- min(climate_periods$start_year)
+```
+
+### Coordinate Reference System
+
+```{r}
+#| label: coordinate-reference-system
+mollweide_crs <- "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m" 
+```
+
+### Functions
+
+```{r}
+#| label: function-assign-climate-period
+assign_climate_period <- function(year) {
+  cut(
+    year,
+    breaks = c(
+      climate_periods$start_year,
+      Inf
+    ),
+    labels = climate_periods$climate_period,
+    right = FALSE,
+    ordered_result = TRUE
+  )
+}
+```
+
+### Factors
+
+```{r}
+#| label: factors
+geographic_id_levels <- c("G","S","N")
+
+zone_levels <- c( "90S-24S", "24S-24N", "24N-90N",
+                  "90S-64S", "64S-44S", "44S-24S", "24S-EQU",
+                  "EQU-24N", "24N-44N", "44N-64N", "64N-90N")
+
+climate_period_levels <- c("1", "2", "3", "4", "5")
+```
+
+## Import
+
+### Import csv
+
+```{r}
+#| label: import-csv
+fil <- "GLB.Ts+dSST.csv"
+pth <- file.path(dir_raw, fil)
+df_raw_g <- read_csv(pth, skip=1, na = "***", show_col_types = FALSE)
+names(df_raw_g)
+
+fil <- "NH.Ts+dSST.csv"
+pth <- file.path(dir_raw, fil)
+df_raw_n  <- read_csv(pth, skip=1, na = "***", show_col_types = FALSE)
+names(df_raw_n)
+
+fil <- "SH.Ts+dSST.csv"
+pth <- file.path(dir_raw, fil)
+df_raw_s  <- read_csv(pth, skip=1, na = "***", show_col_types = FALSE)
+names(df_raw_s)
+
+fil <- "ZonAnn.Ts+dSST.csv"
+pth <- file.path(dir_raw, fil)
+df_raw_z <- read_csv(pth, skip=0, na = "***", show_col_types = FALSE)
+names(df_raw_z)
+```
+
+### Import netCDF
+
+#### Open netCDF
+
+```{r}
+#| label: netCDF-import
+nc_data <- ncdf4::nc_open(netCDF_path)
+vname <- "tempanomaly"
+fillvalue <- ncdf4::ncatt_get(nc_data,vname,"_FillValue")
+```
+
+#### Extract netCDF variables
+
+```{r}
+#| label: netCDF-variables
+lon <- ncdf4::ncvar_get(nc_data,"lon")
+lat <- ncdf4::ncvar_get(nc_data,"lat")
+time <- ncdf4::ncvar_get(nc_data,"time")
+values <- ncdf4::ncvar_get(nc_data, vname)
+```
+
+#### Close netCDF
+
+```{r}
+#| label: netCDF-close
+ncdf4::nc_close(nc_data)
+```
+
+## Transform
+
+### Transform tabular
+
+#### Global and Hemisphere Annual
+
+```{r}
+#| label: tabular-annual
+
+cols_to_keep <- c("Year", "J-D")
+
+fn_annual <- function(df, id) {
+  dft <- df |> 
+    select(all_of(cols_to_keep)) |>
+    rename(year = Year) |>
+    rename(anomaly = `J-D`) |>
+    mutate(geographic_id = id) |> 
+    mutate(geographic_id = factor(geographic_id, levels=geographic_id_levels)) |> 
+    mutate(year = as.integer(year)) |>
+    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(climate_period = assign_climate_period(year)) |>
+    select(geographic_id, climate_period, decade, year, anomaly) |> 
+    drop_na()
+  return(dft)
+}
+
+df1 <- fn_annual(df_raw_g, id="G")
+df2 <- fn_annual(df_raw_n, id="N")
+df3 <- fn_annual(df_raw_s, id="S")
+
+df_annual <- bind_rows(df1, df2, df3)
+df_annual <- df_annual |> filter(year >= analysis_start_year)
+rm(df1, df2, df3)
+```
+
+#### Global and Hemisphere Monthly
+
+```{r}
+#| label: tabular-monthly
+
+cols_to_keep <- c("Year",
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+fn_monthly <- function(df, id) {
+  dft <- df |> 
+    select(all_of(cols_to_keep)) |>
+    pivot_longer(
+      cols=c(Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec), 
+      names_to = "month_abbr",
+      values_to = "anomaly",
+      values_drop_na = TRUE) |>
+    rename(year = Year) |>
+    mutate(month = match(month_abbr,month.abb)) |> 
+    mutate(date = as.Date(sprintf("%04d-%02d-01",year,month))) |> 
+    mutate(geographic_id = id) |> 
+    mutate(geographic_id = factor(geographic_id, levels=geographic_id_levels)) |> 
+    mutate(year = as.integer(year)) |>
+    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(climate_period = assign_climate_period(year)) |>
+    select(geographic_id, climate_period, decade, year, month, date, anomaly)
+
+  return(dft)
+}
+
+df1 <- fn_monthly(df_raw_g, id="G")
+df2 <- fn_monthly(df_raw_n, id="N")
+df3 <- fn_monthly(df_raw_s, id="S")
+
+df_monthly <- bind_rows(df1, df2, df3)
+df_monthly <- df_monthly |> filter(year >= analysis_start_year)
+rm(df1, df2, df3)
+```
+
+#### Seasonal Annual
+
+Meteorological seasons are hemisphere dependent:  
+
+  - NH winter, SH summer: December, January, February. 
+  - NH spring, SH autumn: March, April, May. 
+  - NH summer, SH winter: June, July, August. 
+  - NH autumn, SH spring: September, October, November. 
+
+```{r}
+#| label: tabular-seasonal
+
+cols_to_keep <- c("Year", "DJF", "MAM", "JJA", "SON")
+
+fn_seasonal <- function(df, id) {
+  dft <- df |> 
+    select(all_of(cols_to_keep)) |>
+    pivot_longer(
+      cols=c(DJF, MAM, JJA, SON), 
+      names_to = "months",
+      values_to = "anomaly",
+      values_drop_na = TRUE) |>
+    rename(year = Year) |>
+    mutate(geographic_id = id) |> 
+    mutate(geographic_id = factor(geographic_id, geographic_id_levels)) |> 
+    mutate(year = as.integer(year)) |>
+    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(climate_period = assign_climate_period(year)) |>
+    mutate(season = case_when(
+      geographic_id == "N" & months == "DJF" ~ "Winter",
+      geographic_id == "N" & months == "MAM" ~ "Spring",
+      geographic_id == "N" & months == "JJA" ~ "Summer",
+      geographic_id == "N" & months == "SON" ~ "Autumn",
+      geographic_id == "S" & months == "DJF" ~ "Summer",
+      geographic_id == "S" & months == "MAM" ~ "Autumn",
+      geographic_id == "S" & months == "JJA" ~ "Winter",
+      geographic_id == "S" & months == "SON" ~ "Spring"
+    ))|>
+    select(geographic_id, climate_period, decade, year, season, anomaly)
+  return(dft)
+}
+
+df1 <- fn_seasonal(df_raw_n, id="N")
+df2 <- fn_seasonal(df_raw_s, id="S")
+
+df_seasonal <- bind_rows(df1, df2)
+
+df_seasonal <- df_seasonal |> filter(year >= analysis_start_year)
+rm(df1, df2)
+```
+
+#### Zonal Annual 
+
+```{r}
+#| label: tabular-zonal
+
+fn_zonal <- function(df,select_cols,tidy_cols,id) {
+  dft <- df |> 
+    select(all_of(select_cols)) |>
+    pivot_longer(
+      cols =  all_of(tidy_cols),
+      names_to = "zone",
+      values_to = "anomaly",
+      values_drop_na = TRUE) |> 
+    rename(year = Year) |>
+    mutate(zonal_id = id) |>
+    mutate(zonal_id = factor(zonal_id)) |>
+    mutate(zone = factor(zone, levels=zone_levels)) |>
+    mutate(year = as.integer(year)) |>
+    mutate(decade = as.integer(year - (year %% 10) + 10)) |> 
+    mutate(climate_period = assign_climate_period(year)) |>
+    select(zonal_id, zone, climate_period, year, anomaly)
+  return(dft) 
+}
+
+tidy_cols <- colnames(df_raw_z[,5:7])
+select_cols <- c("Year",tidy_cols)
+df_z3 <- fn_zonal(df_raw_z, select_cols, tidy_cols, id = "z3")
+
+tidy_cols <- colnames(df_raw_z[,8:15])
+select_cols <- c("Year",tidy_cols)
+df_z8 <- fn_zonal(df_raw_z, select_cols, tidy_cols, id = "z8")
+
+df_zonal <- bind_rows(df_z3, df_z8)
+df_zonal <- df_zonal |> filter(year >= analysis_start_year)
+rm(df_z3, df_z8, tidy_cols, select_cols)
+```
+
+### Transform gridded
+
+#### Identify missing values
+
+```{r}
+#| label: gridded-missing-values
+values[values==fillvalue$value] <- NA
+```
+
+#### Transform dates
+
+```{r}
+#| label: gridded-time
+
+dates <- as.Date(
+  time,
+  origin = "1800-01-01"
+)
+
+years <- as.integer(
+  format(dates, "%Y")
+)
+```
+
+#### Assign climate period
+
+```{r}
+#| label: gridded-assign-period
+
+netCDF_period <- assign_climate_period(years)
+```
+
+#### Aggregate to climate period
+
+```{r}
+#| label: gridded-aggregate-climate-period
+
+period_levels <- climate_periods$climate_period
+
+values_period <- simplify2array(
+  lapply(
+    period_levels,
+    function(p) {
+
+      period_index <-
+        years >= analysis_start_year &
+        !is.na(netCDF_period) &
+        netCDF_period == p
+
+      apply(
+        values[
+          ,
+          ,
+          period_index,
+          drop = FALSE
+        ],
+        c(1, 2),
+        mean,
+        na.rm = TRUE
+      )
+    }
+  )
+)
+```
+
+#### Convert to spatial data frame
+
+##### Create grid polygons
+
+```{r}
+#| label: create-grid-polygons
+
+# Grid spacing
+lon_resolution <- median(diff(sort(unique(lon))))
+lat_resolution <- median(diff(sort(unique(lat))))
+
+# Create one polygon for every netCDF grid cell
+grid_geometry <- st_make_grid(
+  st_as_sfc(
+    st_bbox(
+      c(
+        xmin = min(lon) - lon_resolution / 2,
+        xmax = max(lon) + lon_resolution / 2,
+        ymin = min(lat) - lat_resolution / 2,
+        ymax = max(lat) + lat_resolution / 2
+      ),
+      crs = st_crs(4326)
+    )
+  ),
+  cellsize = c(
+    lon_resolution,
+    lat_resolution
+  ),
+  what = "polygons"
+)
+
+grid_centers <- expand.grid(
+  lon = lon,
+  lat = lat
+)
+
+grid_sf <- st_sf(
+  cell_id = seq_len(nrow(grid_centers)),
+  grid_centers,
+  geometry = grid_geometry,
+  crs = 4326
+)
+```
+
+##### Attach climate period anomalies
+
+```{r}
+#| label: expand-grid
+df_gridded <- expand.grid(
+  cell_id = seq_len(length(lon) * length(lat)),
+  climate_period = period_levels
+) |>
+  mutate(
+    avg_anomaly = as.vector(values_period)
+  ) |>
+  filter(
+    is.finite(avg_anomaly)
+  ) |>
+  mutate(
+    climate_period = factor(
+      climate_period,
+      levels = period_levels,
+      ordered = TRUE
+    )
+  )
+
+sf_gridded <- df_gridded |>
+  left_join(
+    grid_sf,
+    by = "cell_id"
+  ) |>
+  st_as_sf()
+```
+
+##### Equal Area Projection
+
+```{r}
+#| label: gridded-equal-area-projection
+sf_gridded <- sf_gridded |>
+   st_transform(mollweide_crs)
+```
+
+##### Calculate cell areas
+
+```{r}
+#| label: area-km
+sf_gridded <- sf_gridded |>
+  mutate(
+    area_km2 = as.numeric(
+      st_area(geometry)
+    ) / 1e6
+  )
+```
+
+## Aggregate
+
+### Aggregate tabular
+
+```{r}
+#| label: aggregate-tabular-data
+df_decade <- df_annual |>
+  group_by(
+    geographic_id,
+    decade
+  ) |>
+  summarize(
+    anomaly = mean(
+      anomaly,
+      na.rm = TRUE
+    ),
+    n_years = sum(
+      !is.na(anomaly)
+    ),
+    .groups = "drop"
+  )
+df_hemisphere_period <- df_monthly |>
+  filter(geographic_id != "G",
+    !is.na(climate_period)) |>
+  group_by(
+    geographic_id,
+    climate_period
+  ) |>
+  summarize(
+    avg_anomaly = mean(anomaly, na.rm = TRUE),
+    n_months = sum(!is.na(anomaly)),
+    .groups = "drop"
+  )
+df_zone_period <- df_zonal |>
+  filter(!is.na(climate_period)) |>
+  group_by(
+    zonal_id,
+    zone,
+    climate_period
+  ) |>
+  summarize(
+    avg_anomaly = mean(anomaly, na.rm = TRUE),
+    n_years = sum(!is.na(anomaly)),
+    .groups = "drop"
+  )
+```
+
+### Aggregate climate periods
+
+```{r}
+#| label: aggregate-tabular-climate-periods
+df_hemisphere_period <- df_hemisphere_period |>
+  mutate(
+    climate_period = factor(
+      climate_period,
+      levels = climate_period_levels,
+      ordered = TRUE
+    )
+  )
+df_zone_period <- df_zone_period |>
+  mutate(
+    climate_period = factor(
+      climate_period,
+      levels = climate_period_levels,
+      ordered = TRUE
+    )
+  )
+```
+
+## Save
+
+```{r}
+#| label: save
+# saving as rds instead of csv preserves the factor designations
+write_rds(df_monthly, file.path(dir_transformed, "monthly.rds"))
+write_rds(df_annual, file.path(dir_transformed, "annual.rds"))
+write_rds(df_decade, file.path(dir_transformed, "decade.rds"))
+write_rds(df_seasonal, file.path(dir_transformed, "seasonal.rds"))
+write_rds(df_hemisphere_period, file.path(dir_transformed,"hemisphere.rds"))
+write_rds(df_zone_period, file.path(dir_transformed,"zone.rds"))
+write_rds(sf_gridded, file.path(dir_transformed,"gridded.rds"))
+```
+
+## Transformed Data Catalog
+
+### Lookup table
+
+```{r}
+#| label: table-descriptions
+transformed_descriptions <- tribble(
+  ~filename,                     ~dataset,
+  "monthly.rds",                 "Monthly temperature anomalies",
+  "annual.rds",                  "Annual temperature anomalies",
+  "decade.rds",                  "Decadal temperature anomalies",
+  "seasonal.rds",                "Seasonal temperature anomalies",
+  "hemisphere.rds",              "Hemisphere anomalies by climate period",
+  "zone.rds",                    "Latitude-zone anomalies by climate period",
+  "gridded.rds",                 "Gridded anomalies by climate period"
+)
+```
+
+### Create catalog
+
+```{r}
+#| label: transformed-data-catalog
+
+transformed_catalog <- tibble(
+  path = list.files(
+    dir_transformed,
+    full.names = TRUE
+  )
+) |>
+  filter(
+    !file.info(path)$isdir
+  ) |>
+  mutate(
+    filename = basename(path),
+    format = tools::file_ext(filename),
+    directory = dirname(path),
+    transformation_datetime = format(
+      file.info(path)$mtime,
+      "%Y-%m-%d %H:%M"
+    ),
+    file_size_kb = round(
+      file.info(path)$size / 1024,
+      0
+    )
+  ) |>
+  left_join(
+    transformed_descriptions,
+    by = "filename"
+  ) |>
+  arrange(filename) |>
+  select(
+    dataset,
+    filename,
+    format,
+    directory,
+    transformation_datetime,
+    file_size_kb
+  )
+```
+
+```{r}
+#| label: transformed-data-summary
+
+transformed_catalog |>
+  gt() |>
+  cols_label(
+    dataset = "Dataset",
+    filename = "Filename",
+    format = "File Format",
+    directory = "Local Directory",
+    transformation_datetime = "Transformed",
+    file_size_kb = "Size (KB)"
+  ) |>
+  fmt_number(
+    columns = file_size_kb,
+    decimals = 0
+  ) |>
+  cols_align(
+    align = "center",
+    columns = c(
+      format,
+      transformation_datetime,
+      file_size_kb
+    )
+  ) |>
+  tab_header(
+    title = "Transformed Data Files",
+    subtitle = "Files produced by the data transformation workflow"
+  )
+```

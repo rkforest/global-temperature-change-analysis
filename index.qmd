@@ -1,0 +1,80 @@
+## Introduction {.unnumbered}
+
+This project analyzes global temperature change from 1901 through the most recent data available from the NASA Goddard Institute for Space Studies (GISS).
+
+The analysis examines temperature change from several complementary perspectives, including long-term temporal trends, statistical distributions, hemispheric differences, latitude zones, seasonal patterns, surface-area distributions, and global spatial patterns.
+
+## Temperature Anomalies
+
+Temperature change is expressed using temperature anomalies rather than absolute temperatures. An anomaly represents the difference between an observed temperature and a reference-period average.
+
+The NASA GISTEMP data used in this project express temperature anomalies relative to the **1951–1980 baseline**. This reference baseline is retained throughout the analysis so that all reported anomaly values have a consistent interpretation.
+
+## Climate Periods
+
+The analysis groups observations into consecutive 30-year climate periods beginning in 1901. The use of 30-year periods follows the climatological convention used by the World Meteorological Organization (WMO).
+
+| Climate Period | Years |
+|---|---|
+| 1 | 1901–1930 |
+| 2 | 1931–1960 |
+| 3 | 1961–1990 |
+| 4 | 1991–2020 |
+| 5 | 2021–Present |
+
+The final climate period is incomplete and extends through the most recent data available.
+
+## Workflow
+
+The analysis is organized as a reproducible workflow consisting of three stages:
+
+1. **Data Acquisition**  
+   Download the latest NASA GISTEMP temperature data and Natural Earth coastline data, and document the project software environment and acquired datasets.
+
+2. **Data Transformation**  
+   Clean, transform, aggregate, and spatially prepare the source data; calculate grid-cell areas; and save reusable transformed datasets.
+
+3. **Data Visualization**  
+   Create statistical summaries and visualizations examining global time series, climate-period distributions, hemispheres, latitude zones, seasons, surface-area distributions, and global gridded temperature patterns.
+
+## Data
+
+Temperature data are obtained from the NASA GISS Surface Temperature Analysis (GISTEMP) project.
+
+The source data used in this analysis include:
+
+- Global monthly temperature anomalies
+- Northern Hemisphere monthly temperature anomalies
+- Southern Hemisphere monthly temperature anomalies
+- Latitude-zone annual temperature anomalies
+- Global gridded monthly temperature anomalies in NetCDF format
+
+The global coastline is obtained from Natural Earth and is used as a geographic reference layer for the global maps.
+
+## Software
+
+Programming Language: **R**  
+Development Environment: **Positron**  
+Document Creation: **Quarto**
+
+R Packages:
+
+- **gt** – summary tables
+- **ncdf4** – NetCDF processing
+- **pals** – diverging color palettes
+- **patchwork** – plot layouts
+- **rnaturalearth** – geographic coastline data
+- **R.utils** – gzip decompression
+- **sf** – spatial data processing
+- **tidyverse** – data manipulation and visualization
+- **viridisLite** – sequential color palettes
+
+Exact software and package versions used for the project are documented in the Data Acquisition chapter.
+
+## References
+
+World Meteorological Organization climatological reference periods:  
+<https://www.ncei.noaa.gov/products/wmo-climate-normals>
+
+NASA Goddard Institute for Space Studies (GISTEMP):  
+<https://data.giss.nasa.gov/gistemp/>
