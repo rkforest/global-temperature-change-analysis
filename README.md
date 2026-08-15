@@ -153,3 +153,7 @@ as equal in area.
 ## Author
 
 Rick Forest
+
+## Data licensing: 
+
+This repository contains code developed for this project. The NASA GISTEMP and Natural Earth datasets remain subject to their respective licenses and terms of use.
