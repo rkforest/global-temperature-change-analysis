@@ -152,6 +152,19 @@ The acquisition chapter downloads the required source data, and the
 transformation chapter creates the derived datasets required by the
 visualization chapter.
 
+## Reproducibility Test
+
+This project has been tested on a clean macOS installation.
+
+A second computer was able to:
+
+- clone the GitHub repository,
+- restore the project environment using `renv`,
+- download all source datasets,
+- regenerate all transformed datasets,
+- render the complete Quarto book,
+- reproduce the published results without modification.
+
 ## Output
 
 The project renders as an HTML Quarto book containing the complete

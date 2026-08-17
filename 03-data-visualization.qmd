@@ -2,64 +2,49 @@
 title: "Data Visualization"
 author: "Rick Forest"
 date: today
+
+execute:
+  echo: true
+  warning: false
+  message: false
+
 format:
   html:
     toc: true
     number-sections: false
     code-fold: true
+    code-summary: "Show code"
     code-tools: true
 ---
+---
 
-This step creates visualizations to show how temperature anomalies have changed.  
-  -  Global Time Series
-  -  Climate Period Comparisons
-     -  Temperature Distributions  
-     -  Hemisphere Differences 
-     -  Geographic Latitude Zone Differences  
-     -  Seasonal Differences  
-     -  Surface Area Proportions
-  -  Global Maps  
+**Objective:** Visualize the transformed temperature anomaly data to examine how global temperature change varies over time, across climate periods, and by geographic and seasonal characteristics. This notebook summarizes temporal trends, temperature distributions, hemispheric and latitude-zone differences, seasonal patterns, affected surface area, and concludes with global maps comparing the REF, CSN, and RCI climate periods.
 
 ## Initialization
 
 ```{r}
-#| label: options
-build_maps <- TRUE
-```
-
-### Libraries
-
-```{r}
 #| label: libraries
 suppressPackageStartupMessages({
-  library(tidyverse)   # package collection used for data transforming and visualizing
-  library(gt)        # package used to create and display formatted tables
-  library(patchwork)   # arrange multiple plots in a visualization 
-  library(pals)        # provides coolwarm diverging palette
-  library(viridisLite) # provides sequential palette
+  library(tidyverse)
+  library(gt)
+  library(fs)
+  library(patchwork) 
+  library(pals) 
+  library(viridisLite) 
   library(sf)
 })
 ```
 
-### Paths
 
 ```{r}
-#| label: paths
-dir_raw <- file.path("data", "raw")
-dir_transformed <- file.path("data", "transformed")
-```
+#| label: setup
+build_maps <- TRUE
 
-### Climate Periods
+dir_raw <- path("data", "raw")
+dir_transformed <- path("data", "transformed")
 
-```{r}
-#| label: R-climate-periods
 source("R/climate-periods.R")
-```
 
-### Theme
-
-```{r}
-#| label: global-theme
 theme_climate <- theme_minimal(base_size = 14) +
   theme(
     plot.title = element_text(size = 20, face = "bold", margin = margin(b = 6)),
@@ -77,12 +62,7 @@ theme_climate <- theme_minimal(base_size = 14) +
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank()
   )
-```
 
-### Legends
-
-```{r}
-#| label: legend-climate
 legend_climate <- guide_colorbar(
   direction = "horizontal",
   title.position = "top",
@@ -91,12 +71,6 @@ legend_climate <- guide_colorbar(
   barheight = unit(0.45, "cm"),
   ticks = TRUE
 )
-```
-
-### Palettes
-
-```{r}
-#| label: palettes
 
 # Diverging temperature-anomaly palette
 anomaly_colors <- pals::coolwarm(11)
@@ -104,12 +78,12 @@ anomaly_colors <- pals::coolwarm(11)
 # Sequential climate-period palette
 climate_period_palette <- setNames(
   viridisLite::viridis(
-    5,
+    nrow(climate_periods),
     option = "D",
     begin = 0.25,
     end = 0.80
   ),
-  c("1", "2", "3", "4", "5")
+  climate_periods$period_abbr
 )
 
 # Categorical hemisphere palette
@@ -120,17 +94,12 @@ hemisphere_palette <- c(
 
 # Categorical season palette
 season_palette <- c(
-  "Winter" = "#0072B2",  # blue
-  "Spring" = "#009E73",  # bluish green
-  "Summer" = "#E69F00",  # orange
-  "Autumn" = "#CC79A7"   # reddish purple
+  "Winter" = "#0072B2", # blue
+  "Spring" = "#009E73", # bluish green
+  "Summer" = "#E69F00", # orange
+  "Autumn" = "#CC79A7" # reddish purple
 )
-```
 
-### Color functions
-
-```{r}
-#| label: color-functions
 anomaly_fill_scale <- function(limits) {
   scale_fill_gradient2(
     low = anomaly_colors[1],
@@ -142,19 +111,9 @@ anomaly_fill_scale <- function(limits) {
     guide = legend_climate
   )
 }
-```
 
-### Coordinate Reference System
+mollweide_crs <- "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m"
 
-```{r}
-#| label: CRS
-mollweide_crs <- "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m" 
-```
-
-### Latitude zone labels
-
-```{r}
-#| label: zones
 zone_levels_3 <- c(
   "24N-90N",
   "24S-24N",
@@ -189,68 +148,56 @@ zone_labels_8 <- c(
 )
 ```
 
-## Data
-
-### Import
+## Import
 
 ```{r}
 #| label: import
-df_monthly <- read_rds(file.path(dir_transformed, "monthly.rds"))
-df_annual <- read_rds(file.path(dir_transformed, "annual.rds"))
-df_decade <- read_rds(file.path(dir_transformed, "decade.rds"))
-df_seasonal <- read_rds(file.path(dir_transformed, "seasonal.rds"))
-df_hemisphere <- read_rds(file.path(dir_transformed,"hemisphere.rds"))
-df_zone <- read_rds(file.path(dir_transformed,"zone.rds"))
-sf_gridded <- read_rds(file.path(dir_transformed,"gridded.rds"))
-```
+df_monthly <- read_rds(path(dir_transformed, "monthly.rds"))
+df_annual <- read_rds(path(dir_transformed, "annual.rds"))
+df_decade <- read_rds(path(dir_transformed, "decade.rds"))
+df_seasonal <- read_rds(path(dir_transformed, "seasonal.rds"))
+df_hemisphere <- read_rds(path(dir_transformed, "hemisphere.rds"))
+df_zone <- read_rds(path(dir_transformed, "zone.rds"))
+sf_gridded <- read_rds(path(dir_transformed, "gridded.rds"))
+sf_coastline <- sf::read_sf(path(dir_raw, "global-coastline.gpkg"))
 
-#### Coastline
-
-```{r}
-#| label: import-coastline
-sf_coastline <- sf::read_sf(file.path(dir_raw,"global-coastline.gpkg"))
-```
-
-### Climate periods labels
-
-```{r}
-#| label: climate-periods
 latest_year <- max(df_monthly$year, na.rm = TRUE)
+```
+
+```{r}
+#| label: climate-periods-labels
+
 climate_period_labels <- climate_periods |>
   arrange(start_year) |>
-  mutate(
-    display_end_year = lead(start_year) - 1,
-    display_end_year = if_else(
-      is.na(display_end_year),
-      latest_year,
-      display_end_year
-    ),
+  transmute(
+    period_abbr,
     label = paste0(
+      period_label,
+      " (",
       start_year,
       "–",
-      display_end_year
+      end_year,
+      ")"
     )
-  ) |>
-  select(
-    climate_period,
-    label
   ) |>
   tibble::deframe()
 ```
-
-### Filter
 
 ```{r}
 #| label: filter
 df_glb_mth <- df_monthly |> filter(geographic_id == "G")
 df_glb_ann <- df_annual |> filter(geographic_id == "G")
 df_glb_dec <- df_decade |> filter(geographic_id == "G")
-df_glb_period <- df_monthly |> filter(geographic_id == "G",!is.na(climate_period))
+df_glb_period <- df_monthly |> filter(geographic_id == "G", !is.na(climate_period))
 ```
 
 ## Visualizations
 
 ### Global Time Series
+
+### Global Time Series
+
+Monthly, annual, and decadal temperature anomalies show how the global temperature signal has evolved over the analysis period.
 
 ```{r}
 #| label: v1-color-limits
@@ -266,22 +213,22 @@ glb_color_limits <- range(
 #| label: v1-color-scale
 glb_color_scale <- scale_color_gradientn(
   colours = c(
-    "#3B4CC0",  # strong blue
-    "#5B74C9",  # blue
-    "#8FA4D7",  # light blue
-    "#F7F7F7",  # neutral at zero
-    "#D98D8D",  # light red
-    "#C44747",  # red
-    "#B40426"   # strong red
+    "#3B4CC0", # strong blue
+    "#5B74C9", # blue
+    "#8FA4D7", # light blue
+    "#F7F7F7", # neutral at zero
+    "#D98D8D", # light red
+    "#C44747", # red
+    "#B40426" # strong red
   ),
   values = scales::rescale(
     c(
       glb_color_limits[1],
       -0.10,
       -0.03,
-       0,
-       0.03,
-       0.10,
+      0,
+      0.03,
+      0.10,
       glb_color_limits[2]
     ),
     from = glb_color_limits
@@ -294,10 +241,10 @@ glb_color_scale <- scale_color_gradientn(
 
 ```{r}
 #| label: v1-axis-limits
-mth_range <- range(df_glb_mth$anomaly,na.rm = TRUE)
+mth_range <- range(df_glb_mth$anomaly, na.rm = TRUE)
 mth_buffer <- 0.05 * diff(mth_range)
 mth_y_limits <- mth_range + c(-mth_buffer, mth_buffer)
-ann_dec_range <- range(df_glb_ann$anomaly,df_glb_dec$anomaly,na.rm = TRUE)
+ann_dec_range <- range(df_glb_ann$anomaly, df_glb_dec$anomaly, na.rm = TRUE)
 ann_dec_buffer <- 0.05 * diff(ann_dec_range)
 ann_dec_y_limits <- ann_dec_range + c(-ann_dec_buffer, ann_dec_buffer)
 ```
@@ -375,8 +322,8 @@ plt_glb_mth <- df_glb_mth |>
   ggplot(aes(x = date, y = anomaly)) +
   geom_point(
     aes(color = anomaly),
-      size = 1.3,
-      alpha = 0.8
+    size = 1.3,
+    alpha = 0.8
   ) +
   geom_smooth(
     method = "loess",
@@ -438,12 +385,12 @@ plt_glb_dec <- df_glb_dec |>
     x = "Decade",
     y = NULL
   ) +
-  theme_climate + 
+  theme_climate +
   theme(
     axis.title.y = element_blank(),
     axis.text.y = element_blank(),
     axis.ticks.y = element_blank()
-  ) 
+  )
 ```
 
 ```{r}
@@ -489,7 +436,7 @@ v1_plot_composition
 
 ### Distribution
 
-Distribution of temperatures for each climate period.
+Temperature anomaly distributions compare how the location and spread of observed anomalies differ among the three climate periods.
 
 ```{r}
 #| label: v2-create-statistics
@@ -504,7 +451,7 @@ v2_statistics <- df_glb_mth |>
     upper_fence = q3 + 1.5 * iqr,
     outliers = sum(
       anomaly < lower_fence |
-      anomaly > upper_fence,
+        anomaly > upper_fence,
       na.rm = TRUE
     ),
     .groups = "drop"
@@ -609,14 +556,14 @@ plt_period_box <- df_glb_period |>
   labs(
     x = "Climate Period",
     y = "Anomaly (°C)"
-  ) 
+  )
 v2_display_boxplot <-
   plt_period_box +
-  plot_annotation(
-    title = "Distribution summaries by climate period",
-    subtitle = "Median, interquartile range, and outliers"
-  ) &
-  theme_climate
+    plot_annotation(
+      title = "Distribution summaries by climate period",
+      subtitle = "Median, interquartile range, and outliers"
+    ) &
+    theme_climate
 ```
 
 ```{r}
@@ -642,7 +589,7 @@ plt_period_hist <- df_glb_period |>
     linetype = "dashed"
   ) +
   facet_wrap(
-    ~ climate_period,
+    ~climate_period,
     ncol = 1,
     labeller = as_labeller(climate_period_labels),
     scales = "free_y"
@@ -664,11 +611,11 @@ plt_period_hist <- df_glb_period |>
   )
 v2_display_histogram <-
   plt_period_hist +
-  plot_annotation(
-    title = "Distribution shapes by climate period",
-    subtitle = "Frequency distributions of monthly temperature anomalies"
-  ) &
-  theme_climate
+    plot_annotation(
+      title = "Distribution shapes by climate period",
+      subtitle = "Frequency distributions of monthly temperature anomalies"
+    ) &
+    theme_climate
 ```
 
 ```{r}
@@ -695,6 +642,8 @@ v2_display_histogram
 
 ### Hemispheres
 
+Hemisphere comparisons show whether warming patterns differ between the Northern and Southern Hemispheres.
+
 ```{r}
 #| label: v3-create-statistics
 
@@ -705,7 +654,6 @@ v3_statistics <- df_hemisphere |>
       "N" = "Northern",
       "S" = "Southern"
     ),
-
     hemisphere = factor(
       hemisphere,
       levels = c(
@@ -713,7 +661,6 @@ v3_statistics <- df_hemisphere |>
         "Southern"
       )
     ),
-
     climate_period =
       climate_period_labels[
         as.character(climate_period)
@@ -761,17 +708,21 @@ v3_summary <- v3_statistics |>
 ```{r}
 #| label: v3-create-visualizations
 
-df_hemisphere  <- df_hemisphere |>
-  mutate(geographic_id = factor(geographic_id,levels = c("S","N")))
+df_hemisphere <- df_hemisphere |>
+  mutate(geographic_id = factor(geographic_id, levels = c("S", "N")))
 
 # Consistent vertical-axis limits for both plots
 df_hemisphere_avg <- df_hemisphere |>
   group_by(geographic_id) |>
-  summarize(avg_anomaly = mean(avg_anomaly, na.rm = TRUE),.groups = "drop")
-y_limits <- range(c(0,
-  df_hemisphere_avg$avg_anomaly,
-  df_hemisphere$avg_anomaly),
-  na.rm = TRUE)
+  summarize(avg_anomaly = mean(avg_anomaly, na.rm = TRUE), .groups = "drop")
+y_limits <- range(
+  c(
+    0,
+    df_hemisphere_avg$avg_anomaly,
+    df_hemisphere$avg_anomaly
+  ),
+  na.rm = TRUE
+)
 
 # Add space above and below the bars
 y_expansion <- expansion(mult = c(0.05, 0.10))
@@ -781,7 +732,8 @@ plt_hemisphere_avg <- df_hemisphere_avg |>
   ggplot(aes(
     x = geographic_id,
     y = avg_anomaly,
-    fill = geographic_id)) +
+    fill = geographic_id
+  )) +
   geom_col(show.legend = FALSE) +
   scale_fill_manual(values = hemisphere_palette) +
   scale_y_continuous(
@@ -794,7 +746,7 @@ plt_hemisphere_avg <- df_hemisphere_avg |>
   ) +
   theme_climate
 
-plt_hemisphere_period  <- df_hemisphere  |>
+plt_hemisphere_period <- df_hemisphere |>
   ggplot(
     aes(
       x = climate_period,
@@ -832,15 +784,17 @@ plt_hemisphere_period  <- df_hemisphere  |>
 ```{r}
 #| label: v3-create-composition
 v3_plot_composition <-
-  plt_hemisphere_avg +   
+  plt_hemisphere_avg +
   plt_hemisphere_period +
   plot_layout(
-    widths = c(2, 2),
-    guides = "collect") +
+    widths = c(1, 3),
+    guides = "collect"
+  ) +
   plot_annotation(
     title = "Temperature Anomalies by Hemisphere",
     subtitle = "By Hemisphere and Climate Period",
-    theme = theme_climate) 
+    theme = theme_climate
+  )
 ```
 
 ```{r}
@@ -858,6 +812,8 @@ v3_plot_composition
 ```
 
 ### Latitude zones
+
+Latitude-zone heatmaps examine how temperature anomalies vary geographically from the tropics to the polar regions.
 
 ```{r}
 #| label: v4-prepare-heatmaps
@@ -941,7 +897,7 @@ plt_zone_3 <- df_zone_3_plot |>
     x = "Climate Period",
     y = "Latitude Zone"
   ) +
-  theme_climate 
+  theme_climate
 ```
 
 ```{r}
@@ -983,7 +939,7 @@ plt_zone_8 <- df_zone_8_plot |>
     x = "Climate Period",
     y = "Latitude Zone"
   ) +
-  theme_climate 
+  theme_climate
 ```
 
 ```{r}
@@ -999,7 +955,7 @@ v4_plot_composition <-
     title = "Temperature Anomalies by Latitude Zone",
     subtitle = "Average temperature anomaly by latitude and climate period",
     theme = theme_climate
-  ) 
+  )
 ```
 
 ```{r}
@@ -1012,7 +968,7 @@ v4_plot_composition
 
 ### Seasonality
 
-Seasons are defined separately for each hemisphere before values are averaged.
+Seasonal comparisons evaluate whether temperature anomalies differ systematically across the four meteorological seasons.
 
 ```{r}
 #| label: v5-df-season-period
@@ -1154,7 +1110,7 @@ v5_plot_composition <-
     title = "Seasonal Temperature Anomalies",
     subtitle = "Average anomaly by season and climate period ",
     theme = theme_climate
-)
+  )
 ```
 
 ```{r}
@@ -1172,6 +1128,8 @@ v5_plot_composition
 ```
 
 ### Area
+
+Surface-area distributions quantify how much of the observed global grid experiences temperature anomalies at or above different thresholds.
 
 ```{r}
 #| label: v6-weighted-quantile
@@ -1214,8 +1172,8 @@ df_area_exceedance <- sf_gridded |>
       rev(cumsum(rev(area_km2))),
     percent_area =
       100 *
-      area_at_or_above_km2 /
-      total_area_km2
+        area_at_or_above_km2 /
+        total_area_km2
   ) |>
   ungroup()
 ```
@@ -1357,7 +1315,7 @@ v6_plot_composition <-
     title = "Global Surface Area by Temperature Anomaly",
     subtitle = "Percentage of observed surface area at or above each anomaly threshold",
     theme = theme_climate
-)
+  )
 ```
 
 ```{r}
@@ -1376,9 +1334,11 @@ v6_plot_composition
 
 ### Global Maps
 
+Global maps show the spatial distribution of average temperature anomalies during the REF, CSN, and REC climate periods.
+
 ```{r}
 #| label: v7-map-limits
-map_limits <- range(sf_gridded$avg_anomaly,na.rm = TRUE)
+map_limits <- range(sf_gridded$avg_anomaly, na.rm = TRUE)
 ```
 
 ```{r}
@@ -1391,34 +1351,37 @@ v7_statistics <- sf_gridded |>
       weighted.mean(
         avg_anomaly,
         w = area_km2,
-        na.rm = TRUE),
+        na.rm = TRUE
+      ),
     median_anomaly =
       median(
         avg_anomaly,
-        na.rm = TRUE),
+        na.rm = TRUE
+      ),
     pct_area_above_0 =
       100 *
-      sum(
-        area_km2[avg_anomaly > 0],
-        na.rm = TRUE
-      ) /
-      sum(
-        area_km2[!is.na(avg_anomaly)],
-        na.rm = TRUE
-      ),
+        sum(
+          area_km2[avg_anomaly > 0],
+          na.rm = TRUE
+        ) /
+        sum(
+          area_km2[!is.na(avg_anomaly)],
+          na.rm = TRUE
+        ),
     pct_area_above_1 =
       100 *
-      sum(
-        area_km2[avg_anomaly > 1],
-        na.rm = TRUE
-      ) /
-      sum(
-        area_km2[!is.na(avg_anomaly)],
-        na.rm = TRUE
-      ),
-    .groups = "drop")
+        sum(
+          area_km2[avg_anomaly > 1],
+          na.rm = TRUE
+        ) /
+        sum(
+          area_km2[!is.na(avg_anomaly)],
+          na.rm = TRUE
+        ),
+    .groups = "drop"
+  )
 
-  v7_statistics_table <- v7_statistics |>
+v7_statistics_table <- v7_statistics |>
   pivot_longer(
     cols = -climate_period,
     names_to = "statistic",
@@ -1430,9 +1393,11 @@ v7_statistics <- sf_gridded |>
       area_weighted_mean = "Area-weighted mean anomaly",
       median_anomaly = "Median cell anomaly",
       pct_area_above_0 = "Observed area above 0 °C",
-      pct_area_above_1 = "Observed area above 1 °C"),
+      pct_area_above_1 = "Observed area above 1 °C"
+    ),
     climate_period =
-      climate_period_labels[as.character(climate_period)]) |>
+      climate_period_labels[as.character(climate_period)]
+  ) |>
   pivot_wider(
     names_from = climate_period,
     values_from = value
@@ -1447,9 +1412,11 @@ v7_summary <- v7_statistics_table |>
   fmt_number(
     rows = statistic %in% c(
       "Area-weighted mean anomaly",
-      "Median cell anomaly"),
+      "Median cell anomaly"
+    ),
     columns = -statistic,
-    decimals = 2) |>
+    decimals = 2
+  ) |>
   fmt_percent(
     rows = statistic %in% c(
       "Observed area above 0 °C",
@@ -1457,18 +1424,23 @@ v7_summary <- v7_statistics_table |>
     ),
     columns = -statistic,
     decimals = 0,
-    scale_values = FALSE) |>
+    scale_values = FALSE
+  ) |>
   cols_align(
     align = "left",
-    columns = statistic) |>
+    columns = statistic
+  ) |>
   cols_align(
     align = "center",
-    columns = -statistic) |>
+    columns = -statistic
+  ) |>
   tab_header(
-    title = "Global Spatial Summary by Climate Period") |>
+    title = "Global Spatial Summary by Climate Period"
+  ) |>
   tab_source_note(
     source_note =
-      "Temperature anomalies are in °C; percentages are based on observed grid-cell area.")
+      "Temperature anomalies are in °C; percentages are based on observed grid-cell area."
+  )
 ```
 
 ```{r}
@@ -1478,55 +1450,60 @@ v7_summary
 ```
 
 ```{r}
-#| label: v7-periods-1-4
+#| label: v7-build-maps
 if (build_maps == TRUE) {
-  plt_gridded_period_1_4 <-
+  plt_gridded_periods <-
     sf_gridded |>
-    filter(climate_period %in% c("1", "2", "3", "4")) |>
     ggplot() +
-    geom_sf(aes(fill = avg_anomaly),color = NA) +
-    geom_sf(data = sf_coastline,inherit.aes = FALSE,color = "black",linewidth = 0.1) +
-    facet_wrap( ~ climate_period,ncol = 2,
-      labeller = as_labeller(climate_period_labels)) +
-    coord_sf(crs = mollweide_crs,datum = NA) +
+    geom_sf(
+      aes(fill = avg_anomaly),
+      color = NA
+    ) +
+    geom_sf(
+      data = sf_coastline,
+      inherit.aes = FALSE,
+      color = "black",
+      linewidth = 0.1
+    ) +
+    facet_wrap(
+      ~climate_period,
+      ncol = 1,
+      labeller = as_labeller(climate_period_labels)
+    ) +
+    coord_sf(
+      crs = mollweide_crs,
+      datum = NA
+    ) +
     anomaly_fill_scale(map_limits) +
     theme_void() +
     theme_climate +
-    theme(strip.text = 
-      element_text(size = 15,face = "bold"),legend.position = "none")
-}
-```
-
-```{r}
-#| label: v7-period-5
-if (build_maps == TRUE) {
-  plt_gridded_period_5 <-
-    sf_gridded |>
-    filter(climate_period == "5") |>
-    ggplot() +
-    geom_sf(aes(fill = avg_anomaly),color = NA) +
-    geom_sf(data = sf_coastline,inherit.aes = FALSE,color = "black",linewidth = 0.1) +
-    coord_sf(crs = mollweide_crs,datum = NA) +
-    anomaly_fill_scale(map_limits) +
-    labs(subtitle = climate_period_labels[["5"]]) +
-    theme_void() +
-    theme_climate
+    theme(
+      strip.text = element_text(
+        size = 15,
+        face = "bold"
+      )
+    )
 }
 ```
 
 ```{r}
 #| label: v7-composition
-#| fig-width: 14
-#| fig-height: 15
 if (build_maps == TRUE) {
   v7_composition <-
-    plt_gridded_period_1_4 /
-    plt_gridded_period_5 +
-    plot_layout(heights = c(2,1.25), guides = "collect") +
+    plt_gridded_periods +
     plot_annotation(
       title = "Global Temperature Anomalies by Climate Period",
       subtitle = "Mean monthly temperature anomaly relative to the 1951–1980 baseline",
-      theme = theme_climate) 
-  v7_composition
+      theme = theme_climate
+    )
 }
+```
+
+```{r}
+#| label: v7-display-composition
+#| fig-width: 14
+#| fig-height: 24
+#| echo: false
+
+v7_composition
 ```

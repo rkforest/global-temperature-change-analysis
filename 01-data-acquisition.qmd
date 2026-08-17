@@ -2,36 +2,123 @@
 title: "Data Acquisition"
 author: "Rick Forest"
 date: today
+
+execute:
+  echo: true
+  warning: false
+  message: false
+
 format:
   html:
     toc: true
     number-sections: false
     code-fold: true
+    code-summary: "Show code"
     code-tools: true
 ---
 
-Objective: Acquire data to process global temperature anomalies
+**Objective:** Acquire the source data required to analyze global temperature change. This notebook downloads the latest NASA GISTEMP temperature anomaly datasets and Natural Earth coastline data, archives the source data, and creates a catalog of the files used in the analysis.
+
+## Initialization
+
+```{r}
+#| label: Libraries
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(gt)
+  library(fs)
+  library(R.utils)
+  library(rnaturalearth)
+  library(sf)
+})
+
+```
+
+```{r}
+#| label: Directories
+
+dir_raw <- path("data", "raw")
+dir_transformed <- path("data", "transformed")
+dir_archive <- path("data", "archive")
+
+dir_create(c(
+  dir_raw,
+  dir_transformed,
+  dir_archive
+))
+
+```
+
+```{r}
+#| label: URLs
+
+url_csv <- paste0("https://data.giss.nasa.gov/", "gistemp/tabledata_v4/")
+url_netcdf <- paste0("https://data.giss.nasa.gov/", "pub/gistemp/")
+
+```
+
+```{r}
+#| label: Catalog
+
+file_catalog <-
+  tibble(
+    dataset = c(
+      "Global Monthly Temperature",
+      "Northern Hemisphere Monthly Temperature",
+      "Southern Hemisphere Monthly Temperature",
+      "Latitude Zone Annual Temperature",
+      "Global Gridded Monthly Temperature"
+    ),
+    source = "NASA GISS",
+    format = c(
+      "CSV",
+      "CSV",
+      "CSV",
+      "CSV",
+      "NetCDF"
+    ),
+    filename = c(
+      "GLB.Ts+dSST.csv",
+      "NH.Ts+dSST.csv",
+      "SH.Ts+dSST.csv",
+      "ZonAnn.Ts+dSST.csv",
+      "gistemp1200_GHCNv4_ERSSTv5.nc"
+    ),
+    source_url = c(
+      url_csv,
+      url_csv,
+      url_csv,
+      url_csv,
+      url_netcdf
+    )
+  ) |>
+  mutate(local_path = path(dir_raw,filename))
+
+```
 
 ## Project Software Environment
 
 ```{r}
 #| label: software-versions
+
 quarto_version <- system2("quarto", "--version", stdout = TRUE)[1]
-# Update manually when Positron is upgraded
-positron_version <- "2026.6.0"
+positron_version <- "2026.8.1" # Update manually when Positron is upgraded
 
 software_versions <- data.frame(
   category = c(
     "Platform", "Platform", "Platform",
     "Package", "Package", "Package",
     "Package", "Package", "Package",
-    "Package", "Package", "Package"
+    "Package", "Package", "Package",
+    "Package"
   ),
   software = c(
-    "R","Quarto","Positron",
-    "tidyverse","gt","R.utils",
-    "rnaturalearth","sf","ncdf4",
-    "patchwork","pals","viridisLite"
+    "R", "Quarto", "Positron",
+    "tidyverse", "gt", "fs",
+    "R.utils", "rnaturalearth", "sf",
+    "ncdf4", "patchwork", "pals",
+    "viridisLite"
   ),
   version = c(
     as.character(getRversion()),
@@ -39,6 +126,7 @@ software_versions <- data.frame(
     positron_version,
     as.character(packageVersion("tidyverse")),
     as.character(packageVersion("gt")),
+    as.character(packageVersion("fs")),
     as.character(packageVersion("R.utils")),
     as.character(packageVersion("rnaturalearth")),
     as.character(packageVersion("sf")),
@@ -49,9 +137,10 @@ software_versions <- data.frame(
   ),
   used_in = c(
     "01–03","01–03","Development",
-    "01–03","01–03","01",
-    "01","01–03","02",
-    "03","03","03"
+    "01–03","01–03","01–03",
+    "01","01","01–03",
+    "02","03","03",
+    "03"
   ),
   stringsAsFactors = FALSE
 )
@@ -59,7 +148,8 @@ software_versions <- data.frame(
 
 ```{r}
 #| label: software-versions-table
-library(gt)
+#| echo: false
+
 software_versions |>
   gt(
     groupname_col = "category"
@@ -93,91 +183,27 @@ software_versions |>
   )
 ```
 
-## Initialization
+## Climate Periods
 
-### Libraries
-
-```{r}
-#| label: libraries
-suppressPackageStartupMessages({
-  library(tidyverse)
-  library(R.utils)
-  library(rnaturalearth)
-  library(sf)
-})
-```
-
-### Directories
+The analysis uses three non-overlapping climate periods to provide a consistent framework for comparing long-term and recent temperature change.
 
 ```{r}
-#| label: directories
+#| label: climate-periods
 
-dir_raw <- file.path("data", "raw")
-dir.create(dir_raw, recursive = TRUE, showWarnings = FALSE)
+source("R/climate-periods.R")
 
-dir_transformed <- file.path("data", "transformed")
-dir.create(dir_transformed, recursive = TRUE, showWarnings = FALSE)
-
-dir_archive <- file.path("data", "archive")
-dir.create(dir_archive, recursive = TRUE, showWarnings = FALSE)
-
-```
-
-### URls
-
-```{r}
-#| label: URLs
-url_csv <- paste0("https://data.giss.nasa.gov/", "gistemp/tabledata_v4/")
-url_netcdf <- paste0("https://data.giss.nasa.gov/", "pub/gistemp/")
-```
-
-### Catalog
-
-```{r}
-#| label: catalog
-file_catalog <-
-  tibble(
-    dataset = c(
-      "Global Monthly Temperature",
-      "Northern Hemisphere Monthly Temperature",
-      "Southern Hemisphere Monthly Temperature",
-      "Latitude Zone Annual Temperature",
-      "Global Gridded Monthly Temperature"
-    ),
-    source = "NASA GISS",
-    format = c(
-      "CSV",
-      "CSV",
-      "CSV",
-      "CSV",
-      "NetCDF"
-    ),
-    filename = c(
-      "GLB.Ts+dSST.csv",
-      "NH.Ts+dSST.csv",
-      "SH.Ts+dSST.csv",
-      "ZonAnn.Ts+dSST.csv",
-      "gistemp1200_GHCNv4_ERSSTv5.nc"
-    ),
-    source_url = c(
-      url_csv,
-      url_csv,
-      url_csv,
-      url_csv,
-      url_netcdf
-    )
+climate_periods |>
+  transmute(
+    `Period` = period_name,
+    `Short Label` = period_label,
+    `Abbreviation` = period_abbr,
+    `Years` = sprintf("%d–%d", start_year, end_year)
   ) |>
-  mutate(
-    local_path = file.path(
-      dir_raw,
-      filename
-    )
-  )
+  gt()
+
 ```
 
-## Download temperature anomalies
-
-### Download csv files
+## Download Temperature Anomalies
 
 ```{r}
 #| label: download-csv
@@ -194,15 +220,8 @@ for (i in seq_len(nrow(file_catalog))) {
       filename
     )
 
-    latest_path <- file.path(
-      dir_raw,
-      filename
-    )
-
-    archive_path <- file.path(
-      dir_archive,
-      filename
-    )
+    latest_path <- path(dir_raw, filename)
+    archive_path <- path(dir_archive, filename)
 
     download.file(
       url = download_path,
@@ -211,9 +230,9 @@ for (i in seq_len(nrow(file_catalog))) {
       quiet = TRUE
     )
 
-    file.copy(
-      from = latest_path,
-      to = archive_path,
+    file_copy(
+      path = latest_path,
+      new_path = archive_path,
       overwrite = TRUE
     )
 
@@ -224,8 +243,6 @@ for (i in seq_len(nrow(file_catalog))) {
   }
 }
 ```
-
-### Download netCDF file
 
 ```{r}
 #| label: download-netCDF
@@ -239,17 +256,10 @@ for (i in seq_len(nrow(file_catalog))) {
       filename,
       ".gz"
     )
-    latest_path <- file.path(
-      dir_raw,
-      filename
-    )
-    archive_path <- file.path(
-      dir_archive,
-      paste0(
-        filename,
-        ".gz"
-      )
-    )
+
+    latest_path <- path(dir_raw, filename)
+    archive_path <- path(dir_archive, paste0(filename,".gz"))
+
     temporary_path <- paste0(
       archive_path,
       ".download"
@@ -260,9 +270,9 @@ for (i in seq_len(nrow(file_catalog))) {
       mode = "wb",
       quiet = FALSE
     )
-    file.rename(
-      from = temporary_path,
-      to = archive_path
+    file_move(
+      path = temporary_path,
+      new_path = archive_path
     )
     R.utils::gunzip(
       filename = archive_path,
@@ -274,11 +284,9 @@ for (i in seq_len(nrow(file_catalog))) {
 }
 ```
 
-### Acquire coastline
-
 ```{r}
 #| label: acquire-coastline
-path_coastline <- file.path(dir_raw,"global-coastline.gpkg")
+path_coastline <- path(dir_raw, "global-coastline.gpkg")
 coastline_sf <- rnaturalearth::ne_download(
   scale = 10,
   type = "coastline",
@@ -309,31 +317,33 @@ file_catalog <-
   )
 ```
 
-### Update catalog
+## Acquisition Summary
 
 ```{r}
 #| label: update-catalog
+
+file_metadata <- file_info(file_catalog$local_path)
+
 file_catalog <-
   file_catalog |>
   mutate(
-    directory = dirname(
-      local_path
-    ),
+    directory = path_dir(local_path),
     acquisition_datetime = format(
-      file.info(local_path)$mtime,
+      file_metadata$modification_time,
       "%Y-%m-%d %H:%M"
     ),
     file_size_kb = round(
-      file.info(local_path)$size / 1024,
+      as.numeric(file_metadata$size) / 1024,
       0
     )
   )
+
 ```
 
-## Acquisition summary
 
 ```{r}
 #| label: acquisition-summary
+#| echo: false
 file_catalog |>
   select(
     dataset,

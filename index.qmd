@@ -1,6 +1,6 @@
 ## Introduction {.unnumbered}
 
-This project analyzes global temperature change from 1901 through the most recent data available from the NASA Goddard Institute for Space Studies (GISS).
+This project analyzes global temperature change across three climate periods, beginning with the 1961–1990 WMO Climatological Reference Period and extending through the 2021–2025 Recent Climate Interval, using data from the NASA Goddard Institute for Space Studies (GISS).
 
 The analysis examines temperature change from several complementary perspectives, including long-term temporal trends, statistical distributions, hemispheric differences, latitude zones, seasonal patterns, surface-area distributions, and global spatial patterns.
 
@@ -12,17 +12,13 @@ The NASA GISTEMP data used in this project express temperature anomalies relativ
 
 ## Climate Periods
 
-The analysis groups observations into consecutive 30-year climate periods beginning in 1901. The use of 30-year periods follows the climatological convention used by the World Meteorological Organization (WMO).
+The project uses three non-overlapping analysis periods and one consistent terminology throughout the workflow:
 
-| Climate Period | Years |
-|---|---|
-| 1 | 1901–1930 |
-| 2 | 1931–1960 |
-| 3 | 1961–1990 |
-| 4 | 1991–2020 |
-| 5 | 2021–Present |
+- **WMO Climatological Reference Normals (1961–1990)** — the 1961–1990 period retained by WMO as a standard reference period for long-term climate-change assessment.
+- **WMO Climatological Standard Normals (1991–2020)** — the current WMO 30-year climatological standard normal.
+- **Recent Climate Interval (2021–2025)** — a project-defined recent five-year interval used to identify emerging climate signals. It is not a WMO climatological normal.
 
-The final climate period is incomplete and extends through the most recent data available.
+For compact tables or figures, the project uses the abbreviations **REF**, **CSN**, and **RCI**. These labels are intended to be used consistently in this project and in the companion Global Climate Classification Change Analysis project.
 
 ## Workflow
 
@@ -60,6 +56,7 @@ Document Creation: **Quarto**
 R Packages:
 
 - **gt** – summary tables
+- **fs** - files
 - **ncdf4** – NetCDF processing
 - **pals** – diverging color palettes
 - **patchwork** – plot layouts

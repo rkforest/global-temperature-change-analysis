@@ -1,7 +1,7 @@
 project:
   type: book
-  output-dir: "_output"  
-  resources: ".quarto/files"  # where figures and supporting files go
+  output-dir: "_output"
+  resources: ".quarto/files"
 
 book:
   title: "Global Temperature Change Analysis"
@@ -14,19 +14,20 @@ book:
     - 02-data-transformation.qmd
     - 03-data-visualization.qmd
 
- 
 execute:
   warning: false
   message: false
-
-code-tools: true
-code-fold: show
 
 format:
   html:
     page-layout: full
     toc: true
     toc-location: right
+
+    code-fold: true
+    code-summary: "Show code"
+    code-tools: true
+
     grid:
       sidebar-width: 250px
       body-width: 900px
