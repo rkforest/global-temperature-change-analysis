@@ -112,58 +112,45 @@ patterns in the temperature anomaly data.
 ## Software
 
 The analysis is written in R and rendered with Quarto.
+
 Major R packages include:
- - tidyverse
- - sf
- - ncdf4
- - rnaturalearth
- - R.utils
- - gt
- - patchwork
- - pals
- - viridisLite
+
+- tidyverse
+- sf
+- ncdf4
+- rnaturalearth
+- R.utils
+- gt
+- patchwork
+- pals
+- viridisLite
+
 Exact software and package versions used to render the project are
 documented in the Data Acquisition chapter.
 
-## Reproducible Environment
+## Reproducibility
 
-This project uses **renv** to manage R package dependencies.
+This project uses **renv** to record and manage R package dependencies. The
+package versions used for the analysis are recorded in `renv.lock`.
 
-After cloning the repository, restore the project environment with:
+The analysis has been successfully reproduced on a separate clean macOS
+installation, including downloading the source data, regenerating the
+transformed datasets, and rendering the complete Quarto book.
 
-```r
-install.packages("renv")
-renv::restore()
-```
+Reproducing the project on a new computer may also require installation and
+configuration of system-level software dependencies used by some R packages.
+For that reason, `renv::restore()` alone should not be assumed to provide a
+complete setup on every system.
 
-This installs the package versions recorded in `renv.lock`, ensuring that the analysis can be reproduced with the same software environment used during development.
+The analysis itself is organized to run in order:
 
-## Reproducing the Analysis
+1. `01-data-acquisition.qmd`
+2. `02-data-transformation.qmd`
+3. `03-data-visualization.qmd`
 
-1. Clone the repository and open it as a Quarto project.
-
-2. Run or render the chapters in order:
-
-    01-data-acquisition.qmd
-    02-data-transformation.qmd
-    03-data-visualization.qmd
-
-The acquisition chapter downloads the required source data, and the
-transformation chapter creates the derived datasets required by the
-visualization chapter.
-
-## Reproducibility Test
-
-This project has been tested on a clean macOS installation.
-
-A second computer was able to:
-
-- clone the GitHub repository,
-- restore the project environment using `renv`,
-- download all source datasets,
-- regenerate all transformed datasets,
-- render the complete Quarto book,
-- reproduce the published results without modification.
+The acquisition chapter downloads the required source data, the transformation
+chapter creates the derived datasets, and the visualization chapter produces
+the final analysis and figures.
 
 ## Output
 
