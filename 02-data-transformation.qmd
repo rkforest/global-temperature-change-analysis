@@ -125,7 +125,7 @@ fn_annual <- function(df, id) {
     mutate(geographic_id = id) |>
     mutate(geographic_id = factor(geographic_id, levels = geographic_id_levels)) |>
     mutate(year = as.integer(year)) |>
-    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(decade = as.integer(year - ((year - 1) %% 10) + 9)) |>
     mutate(climate_period = assign_climate_period(year)) |>
     select(geographic_id, climate_period, decade, year, anomaly) |>
     drop_na()
@@ -168,7 +168,7 @@ fn_monthly <- function(df, id) {
     mutate(geographic_id = id) |>
     mutate(geographic_id = factor(geographic_id, levels = geographic_id_levels)) |>
     mutate(year = as.integer(year)) |>
-    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(decade = as.integer(year - ((year - 1) %% 10) + 9)) |>
     mutate(climate_period = assign_climate_period(year)) |>
     select(geographic_id, climate_period, decade, year, month, date, anomaly)
 }
@@ -206,7 +206,7 @@ fn_seasonal <- function(df, id) {
     mutate(geographic_id = id) |>
     mutate(geographic_id = factor(geographic_id, geographic_id_levels)) |>
     mutate(year = as.integer(year)) |>
-    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(decade = as.integer(year - ((year - 1) %% 10) + 9)) |>
     mutate(climate_period = assign_climate_period(year)) |>
     mutate(season = case_when(
       geographic_id == "N" & months == "DJF" ~ "Winter",
@@ -253,7 +253,7 @@ fn_zonal <- function(df, select_cols, tidy_cols, id) {
     mutate(zonal_id = factor(zonal_id)) |>
     mutate(zone = factor(zone, levels = zone_levels)) |>
     mutate(year = as.integer(year)) |>
-    mutate(decade = as.integer(year - (year %% 10) + 10)) |>
+    mutate(decade = as.integer(year - ((year - 1) %% 10) + 9)) |>
     mutate(climate_period = assign_climate_period(year)) |>
     select(zonal_id, zone, climate_period, year, anomaly)
 }
@@ -398,12 +398,12 @@ df_decade <- df_annual |>
     decade
   ) |>
   summarize(
+    n_years = sum(
+      !is.na(anomaly)
+    ),
     anomaly = mean(
       anomaly,
       na.rm = TRUE
-    ),
-    n_years = sum(
-      !is.na(anomaly)
     ),
     .groups = "drop"
   )
